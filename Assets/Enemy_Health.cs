@@ -1,30 +1,20 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-[RequireComponent(typeof(Collider))]
-public class MainTower : MonoBehaviour
+public class Enemy_Health : MonoBehaviour
 {
-    [Header("Vida")]
-    [SerializeField] private float maxHealth = 500f;
+    [Header("Vida base por tag (se asigna automaticamente)")]
+    [SerializeField] private float maxHealth = 100f;
 
-    [Header("Barra de vida (asigna el Fill Image del canvas hijo)")]
+    [Header("Barra de vida (se crea automaticamente si no se asigna)")]
     [SerializeField] private Image healthBarFill;
-    [SerializeField] private Vector3 healthBarOffset = new Vector3(0f, 2f, 0f);
+    [SerializeField] private Vector3 healthBarOffset = new Vector3(0f, 1.5f, 0f);
 
     private float currentHealth;
-    private Canvas worldCanvas;
-
-    private void Reset()
-    {
-        Collider towerCollider = GetComponent<Collider>();
-        if (towerCollider != null)
-        {
-            towerCollider.isTrigger = false;
-        }
-    }
 
     private void Awake()
     {
+        maxHealth = GetMaxHealthByTag(tag);
         currentHealth = maxHealth;
 
         if (healthBarFill == null)
@@ -35,11 +25,7 @@ public class MainTower : MonoBehaviour
         RefreshBar();
     }
 
-    public void TakeDamage(int damage)
-    {
-        TakeDamagePercent(damage / maxHealth);
-    }
-
+    // Called by Player_logic via SendMessage
     public void TakeDamagePercent(float percent)
     {
         currentHealth -= maxHealth * percent;
@@ -52,6 +38,31 @@ public class MainTower : MonoBehaviour
         }
     }
 
+    // Called by Player_logic legacy path via SendMessage
+    public void TakeDamage(int damage)
+    {
+        currentHealth -= damage;
+        currentHealth = Mathf.Max(currentHealth, 0f);
+        RefreshBar();
+
+        if (currentHealth <= 0f)
+        {
+            OnDeath();
+        }
+    }
+
+    private float GetMaxHealthByTag(string enemyTag)
+    {
+        return enemyTag switch
+        {
+            "enemigo_a" => 80f,
+            "enemigo_b" => 120f,
+            "enemigo_c" => 200f,
+            "enemigo_d" => 300f,
+            _ => 100f
+        };
+    }
+
     private void RefreshBar()
     {
         if (healthBarFill != null)
@@ -62,8 +73,7 @@ public class MainTower : MonoBehaviour
 
     private void OnDeath()
     {
-        Debug.Log("MainTower destroyed!");
-        // Add game-over logic here
+        Destroy(gameObject);
     }
 
     private void BuildHealthBarCanvas()
@@ -74,11 +84,11 @@ public class MainTower : MonoBehaviour
         canvasGO.transform.localRotation = Quaternion.identity;
         canvasGO.transform.localScale = Vector3.one * 0.01f;
 
-        worldCanvas = canvasGO.AddComponent<Canvas>();
+        Canvas worldCanvas = canvasGO.AddComponent<Canvas>();
         worldCanvas.renderMode = RenderMode.WorldSpace;
 
         RectTransform canvasRect = canvasGO.GetComponent<RectTransform>();
-        canvasRect.sizeDelta = new Vector2(200f, 20f);
+        canvasRect.sizeDelta = new Vector2(100f, 10f);
 
         // Background
         GameObject bg = new GameObject("Background");
@@ -90,11 +100,11 @@ public class MainTower : MonoBehaviour
         bgRect.anchorMax = Vector2.one;
         bgRect.sizeDelta = Vector2.zero;
 
-        // Fill
+        // Fill - color by tag
         GameObject fill = new GameObject("Fill");
         fill.transform.SetParent(canvasGO.transform, false);
         healthBarFill = fill.AddComponent<Image>();
-        healthBarFill.color = Color.red;
+        healthBarFill.color = GetColorByTag(tag);
         healthBarFill.type = Image.Type.Filled;
         healthBarFill.fillMethod = Image.FillMethod.Horizontal;
         healthBarFill.fillAmount = 1f;
@@ -102,5 +112,17 @@ public class MainTower : MonoBehaviour
         fillRect.anchorMin = Vector2.zero;
         fillRect.anchorMax = Vector2.one;
         fillRect.sizeDelta = Vector2.zero;
+    }
+
+    private Color GetColorByTag(string enemyTag)
+    {
+        return enemyTag switch
+        {
+            "enemigo_a" => Color.red,
+            "enemigo_b" => Color.green,
+            "enemigo_c" => Color.blue,
+            "enemigo_d" => Color.yellow,
+            _ => Color.white
+        };
     }
 }

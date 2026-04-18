@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 [RequireComponent(typeof(Collider))]
 public class Player_logic : MonoBehaviour
@@ -22,6 +23,7 @@ public class Player_logic : MonoBehaviour
     private const string EnemyTagB = "enemigo_b";
     private const string EnemyTagC = "enemigo_c";
     private const string EnemyTagD = "enemigo_d";
+    private const string PlayerTag = "Player";
 
     [Header("Movimiento")]
     [SerializeField] private float moveSpeed = 5f;
@@ -34,9 +36,21 @@ public class Player_logic : MonoBehaviour
     [SerializeField] private float splashDamagePercent = 0.01f;
     [SerializeField] private LayerMask attackLayers = ~0;
 
+    [Header("Visual")]
+    [SerializeField] private Transform playerVisualTarget;
+    [SerializeField] private Renderer playerRenderer;
+    [SerializeField] private Sprite[] attackTypeSprites = new Sprite[4];
+
     private Rigidbody rb;
-    private SpriteRenderer spriteRenderer;
-    private Renderer meshRenderer;
+    [SerializeField] private SpriteRenderer[] spriteRenderers;
+
+    
+
+    private Renderer[] meshRenderers;
+    private Image[] uiImages;
+    private MaterialPropertyBlock colorBlock;
+    private Transform visualRoot;
+    private bool warnedNoVisual;
     private Vector3 moveInput;
     private float attackTimer;
     private AttackType currentAttackType = AttackType.A;
@@ -44,20 +58,27 @@ public class Player_logic : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        spriteRenderer = GetComponentInChildren<SpriteRenderer>();
-        meshRenderer = GetComponentInChildren<Renderer>();
+        colorBlock = new MaterialPropertyBlock();
+        ResolveVisualTargets();
 
         if (rb != null)
         {
             rb.interpolation = RigidbodyInterpolation.Interpolate;
         }
 
+        ApplyAttackSprite();
         ApplyAttackVisualColor();
     }
 
     private void Update()
     {
         HandleAttackTypeInput();
+        if (visualRoot == null)
+        {
+            ResolveVisualTargets();
+        }
+
+        ApplyAttackVisualColor();
 
         Vector2 keyboardMove = ReadKeyboardMovement();
         float horizontal = keyboardMove.x;
@@ -98,6 +119,22 @@ public class Player_logic : MonoBehaviour
         {
             SetAttackType(AttackType.D);
         }
+        else if (keyboard.digit1Key.wasPressedThisFrame)
+        {
+            SetAttackType(AttackType.A);
+        }
+        else if (keyboard.digit2Key.wasPressedThisFrame)
+        {
+            SetAttackType(AttackType.B);
+        }
+        else if (keyboard.digit3Key.wasPressedThisFrame)
+        {
+            SetAttackType(AttackType.C);
+        }
+        else if (keyboard.digit4Key.wasPressedThisFrame)
+        {
+            SetAttackType(AttackType.D);
+        }
     }
 
     private void SetAttackType(AttackType nextType)
@@ -108,12 +145,35 @@ public class Player_logic : MonoBehaviour
         }
 
         currentAttackType = nextType;
+        ApplyAttackSprite();
         ApplyAttackVisualColor();
+    }
+
+    private void ApplyAttackSprite()
+    {
+        int index = (int)currentAttackType;
+        bool hasSprite = attackTypeSprites != null
+            && index < attackTypeSprites.Length
+            && attackTypeSprites[index] != null;
+
+        // Try the manually assigned renderer first
+        SpriteRenderer sr = playerRenderer as SpriteRenderer;
+
+        // Fall back to the first auto-found SpriteRenderer
+        if (sr == null && spriteRenderers != null && spriteRenderers.Length > 0)
+        {
+            sr = spriteRenderers[0];
+        }
+
+        if (sr != null && hasSprite)
+        {
+            sr.sprite = attackTypeSprites[index];
+        }
     }
 
     private void ApplyAttackVisualColor()
     {
-        if (!CompareTag("player"))
+        if (visualRoot == null)
         {
             return;
         }
@@ -127,14 +187,96 @@ public class Player_logic : MonoBehaviour
             _ => Color.red
         };
 
-        if (spriteRenderer != null)
+        for (int i = 0; i < spriteRenderers.Length; i++)
         {
-            spriteRenderer.color = color;
+            if (spriteRenderers[i] != null)
+            {
+                spriteRenderers[i].color = color;
+            }
         }
 
-        if (meshRenderer != null)
+        for (int i = 0; i < meshRenderers.Length; i++)
         {
-            meshRenderer.material.color = color;
+            Renderer currentRenderer = meshRenderers[i];
+            if (currentRenderer == null)
+            {
+                continue;
+            }
+
+            currentRenderer.GetPropertyBlock(colorBlock);
+
+            if (currentRenderer.sharedMaterial != null && currentRenderer.sharedMaterial.HasProperty("_BaseColor"))
+            {
+                colorBlock.SetColor("_BaseColor", color);
+            }
+
+            if (currentRenderer.sharedMaterial != null && currentRenderer.sharedMaterial.HasProperty("_Color"))
+            {
+                colorBlock.SetColor("_Color", color);
+            }
+
+            currentRenderer.SetPropertyBlock(colorBlock);
+
+            if (currentRenderer.sharedMaterial != null)
+            {
+                if (currentRenderer.sharedMaterial.HasProperty("_BaseColor"))
+                {
+                    currentRenderer.material.SetColor("_BaseColor", color);
+                }
+
+                if (currentRenderer.sharedMaterial.HasProperty("_Color"))
+                {
+                    currentRenderer.material.SetColor("_Color", color);
+                }
+            }
+        }
+
+        for (int i = 0; i < uiImages.Length; i++)
+        {
+            if (uiImages[i] != null)
+            {
+                uiImages[i].color = color;
+            }
+        }
+    }
+
+    private void ResolveVisualTargets()
+    {
+        if (playerVisualTarget != null)
+        {
+            visualRoot = playerVisualTarget;
+        }
+        else
+        {
+            GameObject playerByTag = null;
+            try
+            {
+                playerByTag = GameObject.FindGameObjectWithTag(PlayerTag);
+            }
+            catch
+            {
+                playerByTag = null;
+            }
+
+            if (playerByTag != null)
+            {
+                visualRoot = playerByTag.transform;
+            }
+            else
+            {
+                GameObject playerByName = GameObject.Find("Player");
+                visualRoot = playerByName != null ? playerByName.transform : transform;
+            }
+        }
+
+        spriteRenderers = visualRoot.GetComponentsInChildren<SpriteRenderer>(true);
+        meshRenderers = visualRoot.GetComponentsInChildren<Renderer>(true);
+        uiImages = visualRoot.GetComponentsInChildren<Image>(true);
+
+        if (!warnedNoVisual && spriteRenderers.Length == 0 && meshRenderers.Length == 0 && uiImages.Length == 0)
+        {
+            warnedNoVisual = true;
+            Debug.LogWarning("Player_logic: No renderers found to color. Assign Player Visual Target in inspector.", this);
         }
     }
 
@@ -190,7 +332,7 @@ public class Player_logic : MonoBehaviour
             transform.position,
             attackRange,
             attackLayers,
-            QueryTriggerInteraction.Collide
+            QueryTriggerInteraction.UseGlobal
         );
 
         for (int i = 0; i < hits.Length; i++)
