@@ -50,6 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\movment_skills.cs" />
+    <Compile Include="Assets\MainTower.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
