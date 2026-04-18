@@ -10,6 +10,19 @@ public class Player_logic : MonoBehaviour
         XZ
     }
 
+    private enum AttackType
+    {
+        A,
+        B,
+        C,
+        D
+    }
+
+    private const string EnemyTagA = "enemigo_a";
+    private const string EnemyTagB = "enemigo_b";
+    private const string EnemyTagC = "enemigo_c";
+    private const string EnemyTagD = "enemigo_d";
+
     [Header("Movimiento")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private MovementPlane movementPlane = MovementPlane.XY;
@@ -17,24 +30,35 @@ public class Player_logic : MonoBehaviour
     [Header("Ataque automatico")]
     [SerializeField] private float attackInterval = 1.5f;
     [SerializeField] private float attackRange = 2f;
-    [SerializeField] private int attackDamage = 1;
+    [SerializeField] private float focusedDamagePercent = 0.25f;
+    [SerializeField] private float splashDamagePercent = 0.01f;
     [SerializeField] private LayerMask attackLayers = ~0;
 
     private Rigidbody rb;
+    private SpriteRenderer spriteRenderer;
+    private Renderer meshRenderer;
     private Vector3 moveInput;
     private float attackTimer;
+    private AttackType currentAttackType = AttackType.A;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+        meshRenderer = GetComponentInChildren<Renderer>();
+
         if (rb != null)
         {
             rb.interpolation = RigidbodyInterpolation.Interpolate;
         }
+
+        ApplyAttackVisualColor();
     }
 
     private void Update()
     {
+        HandleAttackTypeInput();
+
         Vector2 keyboardMove = ReadKeyboardMovement();
         float horizontal = keyboardMove.x;
         float vertical = keyboardMove.y;
@@ -47,6 +71,70 @@ public class Player_logic : MonoBehaviour
         {
             attackTimer = 0f;
             AutoAttack();
+        }
+    }
+
+    private void HandleAttackTypeInput()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+        {
+            return;
+        }
+
+        if (keyboard.upArrowKey.wasPressedThisFrame)
+        {
+            SetAttackType(AttackType.A);
+        }
+        else if (keyboard.rightArrowKey.wasPressedThisFrame)
+        {
+            SetAttackType(AttackType.B);
+        }
+        else if (keyboard.downArrowKey.wasPressedThisFrame)
+        {
+            SetAttackType(AttackType.C);
+        }
+        else if (keyboard.leftArrowKey.wasPressedThisFrame)
+        {
+            SetAttackType(AttackType.D);
+        }
+    }
+
+    private void SetAttackType(AttackType nextType)
+    {
+        if (currentAttackType == nextType)
+        {
+            return;
+        }
+
+        currentAttackType = nextType;
+        ApplyAttackVisualColor();
+    }
+
+    private void ApplyAttackVisualColor()
+    {
+        if (!CompareTag("player"))
+        {
+            return;
+        }
+
+        Color color = currentAttackType switch
+        {
+            AttackType.A => Color.red,
+            AttackType.B => Color.green,
+            AttackType.C => Color.blue,
+            AttackType.D => Color.yellow,
+            _ => Color.red
+        };
+
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = color;
+        }
+
+        if (meshRenderer != null)
+        {
+            meshRenderer.material.color = color;
         }
     }
 
@@ -111,14 +199,35 @@ public class Player_logic : MonoBehaviour
                 ? hits[i].attachedRigidbody.gameObject
                 : hits[i].gameObject;
 
-            if (!target.CompareTag("enemigo"))
+            string targetTag = target.tag;
+            if (!IsEnemyTag(targetTag))
             {
                 continue;
             }
 
-            // The enemy can later implement TakeDamage(int damage).
-            target.SendMessage("TakeDamage", attackDamage, SendMessageOptions.DontRequireReceiver);
+            float damagePercent = IsFocusedTarget(targetTag) ? focusedDamagePercent : splashDamagePercent;
+            target.SendMessage("TakeDamagePercent", damagePercent, SendMessageOptions.DontRequireReceiver);
         }
+    }
+
+    private bool IsEnemyTag(string targetTag)
+    {
+        return targetTag == EnemyTagA
+            || targetTag == EnemyTagB
+            || targetTag == EnemyTagC
+            || targetTag == EnemyTagD;
+    }
+
+    private bool IsFocusedTarget(string targetTag)
+    {
+        return currentAttackType switch
+        {
+            AttackType.A => targetTag == EnemyTagA,
+            AttackType.B => targetTag == EnemyTagB,
+            AttackType.C => targetTag == EnemyTagC,
+            AttackType.D => targetTag == EnemyTagD,
+            _ => false
+        };
     }
 
     private void OnDrawGizmosSelected()
